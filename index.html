@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>VAPE SHOP | Каталог</title>
+<title>VAPE SHOP | Каталог с фильтрацией</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -73,7 +73,7 @@ body {
 /* SEARCH */
 .search {
   position: relative;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .search input {
@@ -102,12 +102,53 @@ body {
   fill: #888;
 }
 
-/* GRID 2 колонки */
+/* ФИЛЬТРЫ (горизонтальный скролл) */
+.filters {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filters::-webkit-scrollbar {
+  height: 3px;
+}
+
+.filter-btn {
+  background: #f0f0f2;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 40px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f1f2b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.filter-btn.active {
+  background: #000000;
+  color: white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.filter-btn:hover:not(.active) {
+  background: #e2e2e6;
+}
+
+/* GRID */
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-bottom: 28px;
+  min-height: 200px;
 }
 
 /* CARD */
@@ -133,14 +174,18 @@ body {
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   margin: 12px 0 8px;
-  line-height: 1.3;
+  line-height: 1.35;
   color: #1f1f2b;
+  height: 44px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
-/* КНОПКА — только цена */
 .btn-price {
   display: flex;
   align-items: center;
@@ -150,7 +195,7 @@ body {
   border-radius: 40px;
   padding: 10px 0;
   width: 100%;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: white;
   cursor: pointer;
@@ -167,6 +212,18 @@ body {
 
 .btn-price:active {
   transform: scale(0.95);
+}
+
+/* Пустое состояние */
+.empty-message {
+  grid-column: span 2;
+  text-align: center;
+  padding: 48px 20px;
+  background: #ffffff;
+  border-radius: 28px;
+  color: #888;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 /* ИНФО-БЛОК */
@@ -261,13 +318,15 @@ body {
   }
   .card-title {
     font-size: 12px;
+    height: auto;
   }
   .btn-price {
     font-size: 13px;
     padding: 8px 0;
   }
-  .title {
-    font-size: 24px;
+  .filter-btn {
+    padding: 6px 14px;
+    font-size: 12px;
   }
 }
 </style>
@@ -284,10 +343,22 @@ body {
   <div class="title">Каталог</div>
 
   <div class="search">
-    <input type="text" placeholder="Поиск по названию...">
+    <input type="text" id="searchInput" placeholder="Поиск по названию...">
     <svg viewBox="0 0 24 24">
       <path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1014 15.5l.3.3v.8l5 5 1.5-1.5-5-5zM10 15a5 5 0 110-10 5 5 0 010 10z"/>
     </svg>
+  </div>
+
+  <!-- Панель фильтров -->
+  <div class="filters" id="filterBar">
+    <button class="filter-btn active" data-filter="all">Все</button>
+    <button class="filter-btn" data-filter="liquid">Жидкости</button>
+    <button class="filter-btn" data-filter="podonki">Подонки</button>
+    <button class="filter-btn" data-filter="skala">Скала</button>
+    <button class="filter-btn" data-filter="dlta">D.L.T.A.</button>
+    <button class="filter-btn" data-filter="utopia">UTOPIA EXTRA</button>
+    <button class="filter-btn" data-filter="coils">Расходники</button>
+    <button class="filter-btn" data-filter="pods">Поды</button>
   </div>
 
   <div class="grid" id="catalogGrid"></div>
@@ -321,62 +392,108 @@ body {
 </div>
 
 <script>
-  // Данные товаров: имя, цена (число), локальный путь к картинке (относительно папки с html)
-  // Пользователь должен поместить изображения в ту же папку, что и этот файл,
-  // и назвать их согласно указанным именам (или изменить пути в массиве под свои файлы)
+  // ---------- ТОВАРЫ С КАТЕГОРИЯМИ ----------
+  // Категории:
+  // - coils (расходники/испарители)
+  // - liquid (жидкости)
+  // Бренды для жидкостей: podonki, skala, utopia, dlta
   const products = [
-    // Испарители (2шт)
-    { name: "Испаритель Aegis B100 (80-90 Вт)", price: 300, img: "aegis_b100.jpg" },
-    { name: "Испаритель Boost Pro Max (80-90 Вт)", price: 300, img: "boost_pro_max.jpg" },
+    // Расходники (испарители)
+    { name: "Испаритель Aegis B100 (80-90 Вт)", price: 300, img: "aegis_b100.jpg", category: "coils", brand: "aegis" },
+    { name: "Испаритель Boost Pro Max (80-90 Вт)", price: 300, img: "boost_pro_max.jpg", category: "coils", brand: "boost" },
+    
     // UTOPIA EXTRA
-    { name: "UTOPIA EXTRA — Малиновый джем хвоя", price: 300, img: "utopia_malina.jpg" },
-    // Подонки классические (8 вкусов)
-    { name: "Подонки классические — Ананасовый энергетик", price: 450, img: "podonki_ananas_energy.jpg" },
-    { name: "Подонки классические — Виноградно кактусовая жвачка", price: 450, img: "podonki_vinograd_cactus.jpg" },
-    { name: "Подонки классические — Жвачка абрикос", price: 450, img: "podonki_abrikos_gum.jpg" },
-    { name: "Подонки классические — Тропические фрукты со льдом", price: 450, img: "podonki_tropic_ice.jpg" },
-    { name: "Подонки классические — Арбузное мороженое", price: 450, img: "podonki_watermelon_icecream.jpg" },
-    { name: "Подонки классические — Клубничное мороженое", price: 450, img: "podonki_strawberry_icecream.jpg" },
-    { name: "Подонки классические — Брусника клюква малина", price: 450, img: "podonki_cranberry_raspberry.jpg" },
-    { name: "Подонки классические — Малиново клубничная жвачка", price: 450, img: "podonki_rasp_straw_gum.jpg" },
+    { name: "UTOPIA EXTRA — Малиновый джем хвоя", price: 300, img: "utopia_malina.jpg", category: "liquid", brand: "utopia" },
+    
+    // Подонки классические (8 шт)
+    { name: "Подонки классические — Ананасовый энергетик", price: 450, img: "podonki_ananas_energy.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Виноградно кактусовая жвачка", price: 450, img: "podonki_vinograd_cactus.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Жвачка абрикос", price: 450, img: "podonki_abrikos_gum.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Тропические фрукты со льдом", price: 450, img: "podonki_tropic_ice.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Арбузное мороженое", price: 450, img: "podonki_watermelon_icecream.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Клубничное мороженое", price: 450, img: "podonki_strawberry_icecream.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Брусника клюква малина", price: 450, img: "podonki_cranberry_raspberry.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки классические — Малиново клубничная жвачка", price: 450, img: "podonki_rasp_straw_gum.jpg", category: "liquid", brand: "podonki" },
+    
     // D.L.T.A. Зелёный бёрн
-    { name: "D.L.T.A. — Зелёный бёрн", price: 450, img: "dlta_green_burn.jpg" },
-    // Подонки - Винтаж (10 вкусов)
-    { name: "Подонки Винтаж — Морс черника виноград", price: 450, img: "vintage_cherry_grape.jpg" },
-    { name: "Подонки Винтаж — Малиновый пунш", price: 450, img: "vintage_rasp_punch.jpg" },
-    { name: "Подонки Винтаж — Клюквенная газировка", price: 450, img: "vintage_cranberry_soda.jpg" },
-    { name: "Подонки Винтаж — Пина колада с грушей", price: 450, img: "vintage_pina_pear.jpg" },
-    { name: "Подонки Винтаж — Клубничный мохито", price: 450, img: "vintage_straw_mojito.jpg" },
-    { name: "Подонки Винтаж — Ежевичный лимонад", price: 450, img: "vintage_blackberry_lemonade.jpg" },
-    { name: "Подонки Винтаж — Брусничный морс", price: 450, img: "vintage_lingonberry_mors.jpg" },
-    { name: "Подонки Винтаж — Земляничный мусс", price: 450, img: "vintage_straw_mousse.jpg" },
-    { name: "Подонки Винтаж — Апельсиновая газировка", price: 450, img: "vintage_orange_soda.jpg" },
-    { name: "Подонки Винтаж — Виноградная газировка", price: 450, img: "vintage_grape_soda.jpg" },
-    // Скала (2 вкуса, крепкость 20)
-    { name: "Скала — Крем сода со льдом (20 мг)", price: 450, img: "skala_cream_soda_ice.jpg" },
-    { name: "Скала — Персик лёд (20 мг)", price: 450, img: "skala_peach_ice.jpg" }
+    { name: "D.L.T.A. — Зелёный бёрн", price: 450, img: "dlta_green_burn.jpg", category: "liquid", brand: "dlta" },
+    
+    // Подонки Винтаж (10 шт)
+    { name: "Подонки Винтаж — Морс черника виноград", price: 450, img: "vintage_cherry_grape.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Малиновый пунш", price: 450, img: "vintage_rasp_punch.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Клюквенная газировка", price: 450, img: "vintage_cranberry_soda.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Пина колада с грушей", price: 450, img: "vintage_pina_pear.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Клубничный мохито", price: 450, img: "vintage_straw_mojito.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Ежевичный лимонад", price: 450, img: "vintage_blackberry_lemonade.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Брусничный морс", price: 450, img: "vintage_lingonberry_mors.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Земляничный мусс", price: 450, img: "vintage_straw_mousse.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Апельсиновая газировка", price: 450, img: "vintage_orange_soda.jpg", category: "liquid", brand: "podonki" },
+    { name: "Подонки Винтаж — Виноградная газировка", price: 450, img: "vintage_grape_soda.jpg", category: "liquid", brand: "podonki" },
+    
+    // Скала (2 шт, крепость 20)
+    { name: "Скала — Крем сода со льдом (20 мг)", price: 450, img: "skala_cream_soda_ice.jpg", category: "liquid", brand: "skala" },
+    { name: "Скала — Персик лёд (20 мг)", price: 450, img: "skala_peach_ice.jpg", category: "liquid", brand: "skala" }
   ];
 
-  // Функция рендера карточек
-  function renderCatalog() {
-    const grid = document.getElementById('catalogGrid');
-    if (!grid) return;
+  // Текущее состояние фильтра и поиска
+  let currentFilter = "all";   // all, liquid, podonki, skala, dlta, utopia, coils, pods
+  let searchQuery = "";
+
+  // DOM элементы
+  const gridContainer = document.getElementById('catalogGrid');
+  const searchInput = document.getElementById('searchInput');
+  const filterButtons = document.querySelectorAll('.filter-btn');
+
+  // Объект правил фильтрации (удобно, не нужно писать отдельные if)
+  const filterRules = {
+    all:    () => true,
+    liquid: (p) => p.category === "liquid",
+    coils:  (p) => p.category === "coils",
+    pods:   () => false,   // подов в каталоге нет
+    podonki: (p) => p.category === "liquid" && p.brand === "podonki",
+    skala:   (p) => p.category === "liquid" && p.brand === "skala",
+    utopia:  (p) => p.category === "liquid" && p.brand === "utopia",
+    dlta:    (p) => p.category === "liquid" && p.brand === "dlta"
+  };
+
+  // Функция, которая решает, подходит ли товар под текущий фильтр и поиск
+  function matchesFilter(product) {
+    // ---- Фильтр по правилам ----
+    const rule = filterRules[currentFilter];
+    if (!rule || !rule(product)) return false;
     
-    grid.innerHTML = '';
+    // ---- Поиск по названию (регистронезависимый) ----
+    if (searchQuery.trim() !== "") {
+      const nameLower = product.name.toLowerCase();
+      const queryLower = searchQuery.toLowerCase();
+      if (!nameLower.includes(queryLower)) return false;
+    }
     
-    products.forEach(product => {
+    return true;
+  }
+
+  // Рендер сетки на основе текущих фильтров
+  function renderFilteredCatalog() {
+    if (!gridContainer) return;
+    
+    const filteredProducts = products.filter(matchesFilter);
+    
+    if (filteredProducts.length === 0) {
+      gridContainer.innerHTML = `<div class="empty-message">😕 Товаров не найдено<br>Попробуйте изменить фильтр или поиск</div>`;
+      return;
+    }
+    
+    gridContainer.innerHTML = "";
+    
+    filteredProducts.forEach(product => {
       const card = document.createElement('div');
       card.className = 'card';
-      // атрибут для поиска по названию
-      card.setAttribute('data-name', product.name.toLowerCase());
       
-      // изображение
       const img = document.createElement('img');
       img.src = product.img;
       img.alt = product.name;
       img.onerror = function() {
-        // если картинка не найдена в папке, ставим заглушку с текстом
-        this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='300' height='300' fill='%23eeeeee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23999' font-size='14'%3Eno image%3C/text%3E%3C/svg%3E";
+        this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='300' height='300' fill='%23f0f0f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23999' font-size='13' font-family='Inter'%3E🖼️ нет фото%3C/text%3E%3C/svg%3E";
       };
       
       const title = document.createElement('div');
@@ -386,7 +503,6 @@ body {
       const btn = document.createElement('button');
       btn.className = 'btn-price';
       btn.innerText = `${product.price} ₽`;
-      // клик по кнопке -> переход в Telegram
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         window.open('https://t.me/KOSMO_SHOP_ZAKAZ', '_blank');
@@ -395,33 +511,59 @@ body {
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(btn);
-      grid.appendChild(card);
+      gridContainer.appendChild(card);
     });
   }
   
-  // Поиск по названиям
-  function initSearch() {
-    const searchInput = document.querySelector('.search input');
-    if (!searchInput) return;
-    
-    searchInput.addEventListener('input', function(e) {
-      const query = e.target.value.trim().toLowerCase();
-      const cards = document.querySelectorAll('.card');
-      cards.forEach(card => {
-        const nameAttr = card.getAttribute('data-name');
-        if (nameAttr && nameAttr.includes(query)) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
+  // Обновление активной кнопки в фильтрах
+  function setActiveFilterButton(filterValue) {
+    filterButtons.forEach(btn => {
+      const btnFilter = btn.getAttribute('data-filter');
+      if (btnFilter === filterValue) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+  
+  // Обработчик изменения фильтра
+  function onFilterChange(filterValue) {
+    currentFilter = filterValue;
+    setActiveFilterButton(filterValue);
+    renderFilteredCatalog();
+  }
+  
+  // Обработчик поиска
+  function onSearchInput() {
+    searchQuery = searchInput.value;
+    renderFilteredCatalog();
+  }
+  
+  // Инициализация обработчиков
+  function initFiltersAndSearch() {
+    // Кнопки фильтров
+    filterButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filterValue = btn.getAttribute('data-filter');
+        if (filterValue === currentFilter) return;
+        onFilterChange(filterValue);
       });
     });
+    
+    // Поиск
+    if (searchInput) {
+      searchInput.addEventListener('input', onSearchInput);
+    }
+    
+    // Первоначальный рендер
+    renderFilteredCatalog();
   }
   
-  // Запуск
-  renderCatalog();
-  initSearch();
+  // Запуск после загрузки DOM
+  document.addEventListener('DOMContentLoaded', () => {
+    initFiltersAndSearch();
+  });
 </script>
-
 </body>
 </html>
